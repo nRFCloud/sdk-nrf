@@ -47,6 +47,11 @@ struct nct_cc_data {
 	enum nct_cc_opcode opcode;
 };
 
+struct nct_gw_data {
+	struct nrf_cloud_data data;
+	u32_t id;
+};
+
 struct nct_evt {
 	s32_t status;
 	union {

@@ -14,6 +14,11 @@
 #include "cJSON.h"
 #include "cJSON_os.h"
 
+#ifdef CONFIG_APR_GATEWAY
+#include "gateway.h"
+#include "ble_conn_mgr.h"
+#endif
+
 LOG_MODULE_REGISTER(nrf_cloud_codec, CONFIG_NRF_CLOUD_LOG_LEVEL);
 
 #define DUA_PIN_STR "not_associated"
@@ -210,19 +215,67 @@ int nrf_cloud_decode_requested_state(const struct nrf_cloud_data *input,
 	cJSON *pairing_obj;
 	cJSON *pairing_state_obj;
 	cJSON *topic_prefix_obj;
+	cJSON *state_obj;
+	cJSON *type_obj;
+
+    #ifdef CONFIG_APR_GATEWAY
+	cJSON *desired_connections_obj;
+	cJSON *address_obj;
+	cJSON *ble_address;
+	cJSON *ble_address_type;
+	#endif
 
 	root_obj = cJSON_Parse(input->ptr);
 	if (root_obj == NULL) {
 		LOG_ERR("cJSON_Parse failed: %s",
 			log_strdup((char *)input->ptr));
+                cJSON_Delete(root_obj);
 		return -ENOENT;
 	}
 
+	state_obj = json_object_decode(root_obj, "state");
+	if (state_obj == NULL) {
+		
+	}
+         
+    #ifdef CONFIG_APR_GATEWAY
+	else {
+
+		desired_connections_obj = json_object_decode(state_obj, "desiredConnections");
+
+		if(desired_connections_obj != NULL)
+		{
+			ble_conn_mgr_clear_desired();
+
+			for (int i = 0 ; i < cJSON_GetArraySize(desired_connections_obj) ; i++) {
+				cJSON * item = cJSON_GetArrayItem(desired_connections_obj, i);
+				address_obj = cJSON_GetObjectItem(item, "address"); 
+
+				ble_address = cJSON_GetObjectItem(address_obj, "address");
+				ble_address_type = cJSON_GetObjectItem(address_obj, "type");
+
+				LOG_DBG("Desired BLE address: %s", ble_address->valuestring);
+				LOG_DBG("Desired BLE address type: %s", ble_address_type->valuestring);
+			
+				if (ble_conn_mgr_add_conn(ble_address->valuestring, ble_address_type->valuestring)) {
+					LOG_DBG("Conn already added");
+				}
+				ble_conn_mgr_update_desired(ble_address->valuestring, i);
+			}
+			ble_conn_mgr_update_connections();
+		}
+	}
+    #endif
+
 	nrf_cloud_decode_desired_obj(root_obj, &desired_obj);
 
-	topic_prefix_obj =
-		json_object_decode(desired_obj, "nrfcloud_mqtt_topic_prefix");
+	topic_prefix_obj = json_object_decode(desired_obj, "nrfcloud_mqtt_topic_prefix");
 	if (topic_prefix_obj != NULL) {
+
+    	#ifdef CONFIG_APR_GATEWAY
+		set_gw_rx_topic(topic_prefix_obj->valuestring);
+		set_gw_tx_topic(topic_prefix_obj->valuestring);
+		#endif
 		(*requested_state) = STATE_UA_PIN_COMPLETE;
 		cJSON_Delete(root_obj);
 		return 0;
