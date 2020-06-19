@@ -16,6 +16,10 @@
 #include <logging/log.h>
 #include <sys/util.h>
 
+#ifdef CONFIG_APR_GATEWAY
+#include "gateway.h"
+#endif
+
 #if defined(CONFIG_BSD_LIBRARY)
 #include <nrf_socket.h>
 #endif
@@ -38,6 +42,11 @@ LOG_MODULE_REGISTER(nrf_cloud_transport, CONFIG_NRF_CLOUD_LOG_LEVEL);
 #define NRF_CLOUD_CLIENT_ID_LEN (NRF_IMEI_LEN + 4)
 #else
 #define NRF_CLOUD_CLIENT_ID_LEN (sizeof(NRF_CLOUD_CLIENT_ID) - 1)
+#endif
+
+#ifdef CONFIG_APR_GATEWAY
+  #define NRF_CLOUD_CLIENT_ID_LEN  10
+  #define At_CMNG_READ_LEN 97
 #endif
 
 #define NRF_CLOUD_HOSTNAME CONFIG_NRF_CLOUD_HOST_NAME
@@ -78,6 +87,18 @@ LOG_MODULE_REGISTER(nrf_cloud_transport, CONFIG_NRF_CLOUD_LOG_LEVEL);
 
 #define NCT_SHADOW_GET AWS "%s/shadow/get"
 #define NCT_SHADOW_GET_LEN (AWS_LEN + NRF_CLOUD_CLIENT_ID_LEN + 11)
+
+uint8_t nct_c2g_topic_len = 0;
+
+//#define NCT_C2G_TOPIC_LEN (66)              //TODO: Get length instead of hard code: 65 + 1 for \0;
+char nct_c2g_topic_buf[256];
+
+uint8_t nct_g2c_topic_len = 0;
+
+//#define NCT_G2C_TOPIC_LEN (66)
+char nct_g2c_topic_buf[256];
+
+char gateway_id[NRF_CLOUD_CLIENT_ID_LEN+1];
 
 /* Buffer for keeping the client_id + \0 */
 static char client_id_buf[NRF_CLOUD_CLIENT_ID_LEN + 1];
@@ -248,10 +269,113 @@ static u32_t dc_send(const struct nct_dc_data *dc_data, u8_t qos)
 	return mqtt_publish(&nct.client, &publish);
 }
 
+void shadow_publish(char* buffer)
+{
+
+
+	struct mqtt_publish_param publish = {
+		.message.topic.qos = 1,
+		.message.topic.topic.size = NCT_UPDATE_TOPIC_LEN,
+		.message.topic.topic.utf8 = update_topic,
+	};
+
+
+        publish.message.payload.data = buffer;
+        publish.message.payload.len = strlen(buffer);
+
+
+        publish.message_id = dc_get_next_message_id();
+
+
+	mqtt_publish(&nct.client, &publish);
+}
+
+
+void g2c_send(char* buffer)
+{
+
+
+	struct mqtt_publish_param publish = {
+		.message.topic.qos = 1,
+		.message.topic.topic.size = nct_g2c_topic_len-1,
+		.message.topic.topic.utf8 = nct_g2c_topic_buf,
+	};
+
+
+        publish.message.payload.data = buffer;
+        publish.message.payload.len = strlen(buffer);
+
+
+        publish.message_id = dc_get_next_message_id();
+
+	mqtt_publish(&nct.client, &publish);
+}
+
+void nct_gw_subscribe(char* c2g_topic_str)
+{
+  
+   struct mqtt_topic c2g_topic[] = {
+	{
+		.topic = {
+			.utf8 = c2g_topic_str,
+			.size = nct_c2g_topic_len-1
+		},
+		.qos = MQTT_QOS_1_AT_LEAST_ONCE
+	}
+  };
+
+  LOG_DBG("nct_gw_connect");
+
+  const struct mqtt_subscription_list subscription_list = {
+          .list = &c2g_topic,
+          .list_count = 1,
+          .message_id = NCT_CC_SUBSCRIBE_ID
+  };
+
+  return mqtt_subscribe(&nct.client, &subscription_list);
+
+}
+
+void set_gw_rx_topic(char* topic_prefix)
+{
+      nct_c2g_topic_len = 13 + strlen(topic_prefix) + NRF_CLOUD_CLIENT_ID_LEN + 1;
+
+      int i = snprintf(nct_c2g_topic_buf, nct_c2g_topic_len, "%sgateways/%s/c2g", topic_prefix, gateway_id);
+
+      LOG_INF("Gateway RX Topic: %s Len: %d", nct_c2g_topic_buf, i);
+
+      nct_gw_subscribe(nct_c2g_topic_buf);
+}
+
+void set_gw_tx_topic(char* topic_prefix)
+{
+
+      nct_g2c_topic_len = 13 + strlen(topic_prefix) + NRF_CLOUD_CLIENT_ID_LEN + 1;
+
+      snprintf(nct_g2c_topic_buf, nct_g2c_topic_len, "%sgateways/%s/g2c", topic_prefix, gateway_id);
+
+      LOG_INF("Gateway TX Topic: %s", nct_g2c_topic_buf);
+
+}
+
 static bool strings_compare(const char *s1, const char *s2, u32_t s1_len,
 			    u32_t s2_len)
 {
 	return (strncmp(s1, s2, MIN(s1_len, s2_len))) ? false : true;
+}
+
+/* Verify if the topic is a gw topic or not. */
+static bool gw_topic_match(const struct mqtt_topic *topic)
+{
+
+        if (strings_compare(
+                    topic->topic.utf8,
+                    nct_c2g_topic_buf,
+                    topic->topic.size,
+                    nct_c2g_topic_len-1)) {
+                return true;
+        }
+	return false;
 }
 
 /* Verify if the topic is a control channel topic or not. */
@@ -292,20 +416,49 @@ static int nct_client_id_get(char *id)
 	int bytes_written;
 	int bytes_read;
 	char imei_buf[NRF_IMEI_LEN + 1];
+        char psk_buf[100];
+        char err_msg[5];
 	int ret;
 
 	at_socket_fd = nrf_socket(NRF_AF_LTE, NRF_SOCK_DGRAM, NRF_PROTO_AT);
 	__ASSERT_NO_MSG(at_socket_fd >= 0);
 
-	bytes_written = nrf_write(at_socket_fd, "AT+CGSN", 7);
-	__ASSERT_NO_MSG(bytes_written == 7);
+        #ifdef CONFIG_APR_GATEWAY
 
-	bytes_read = nrf_read(at_socket_fd, imei_buf, NRF_IMEI_LEN);
-	__ASSERT_NO_MSG(bytes_read == NRF_IMEI_LEN);
-	imei_buf[NRF_IMEI_LEN] = 0;
+            bytes_written = nrf_write(at_socket_fd, "AT%CMNG=2,16842753,4", 20);
+            __ASSERT_NO_MSG(bytes_written == 20);
+            bytes_read = nrf_read(at_socket_fd, psk_buf, At_CMNG_READ_LEN);
+            __ASSERT_NO_MSG(bytes_read == At_CMNG_READ_LEN);
+        
+            memcpy(err_msg, psk_buf, 5);
+            err_msg[5] = 0;
+            if(!strcmp(err_msg, "ERROR"))
+            {
+               snprintf(id, NRF_CLOUD_CLIENT_ID_LEN + 1, "%s", "no-psk-ids"); 
+            }
+            else
+            {
+              memcpy(gateway_id, psk_buf+86, NRF_CLOUD_CLIENT_ID_LEN);
 
-	snprintf(id, NRF_CLOUD_CLIENT_ID_LEN + 1, "nrf-%s", imei_buf);
+              gateway_id[NRF_CLOUD_CLIENT_ID_LEN] = 0;
 
+              printk("Gateway ID:%s\n", gateway_id);
+
+              snprintf(id, NRF_CLOUD_CLIENT_ID_LEN + 1, "%s", gateway_id);
+            }
+
+        #else
+
+          bytes_written = nrf_write(at_socket_fd, "AT+CGSN", 7);
+          __ASSERT_NO_MSG(bytes_written == 7);
+
+          bytes_read = nrf_read(at_socket_fd, imei_buf, NRF_IMEI_LEN);
+          __ASSERT_NO_MSG(bytes_read == NRF_IMEI_LEN);
+          imei_buf[NRF_IMEI_LEN] = 0;
+
+          snprintf(id, NRF_CLOUD_CLIENT_ID_LEN + 1, "nrf-%s", imei_buf);
+
+        #endif
 	ret = nrf_close(at_socket_fd);
 	__ASSERT_NO_MSG(ret == 0);
 #else
@@ -680,7 +833,9 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 	struct nct_evt evt = { .status = _mqtt_evt->result };
 	struct nct_cc_data cc;
 	struct nct_dc_data dc;
+        struct nct_gw_data gw;
 	bool event_notify = false;
+        bool gateway_notify = false;
 
 #if defined(CONFIG_AWS_FOTA)
 	err = aws_fota_mqtt_evt_handler(mqtt_client, _mqtt_evt);
@@ -740,7 +895,14 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 			evt.type = NCT_EVT_CC_RX_DATA;
 			evt.param.cc = &cc;
 			event_notify = true;
-		} else {
+		} else if (gw_topic_match(&p->message.topic)) {
+
+			gw.id = p->message_id;
+			gw.data.ptr = nct.payload_buf;
+			gw.data.len = p->message.payload.len;
+                        gateway_notify = true;
+
+                } else {
 			/* Try to match it with one of the data topics. */
 			dc.id = p->message_id;
 			dc.data.ptr = nct.payload_buf;
@@ -813,6 +975,15 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 			LOG_ERR("nct_input: failed %d", err);
 		}
 	}
+               
+        #ifdef CONFIG_APR_GATEWAY
+        else if (gateway_notify) {
+                err = gateway_handler(&gw);
+                if (err != 0) {
+                        LOG_ERR("nct_input: failed %d", err);
+                }
+        }
+        #endif
 }
 
 int nct_init(void)
