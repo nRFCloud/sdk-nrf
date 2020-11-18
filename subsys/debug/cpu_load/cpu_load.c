@@ -232,7 +232,9 @@ uint32_t cpu_load_get(void)
 
 	total_us = ((uint64_t)total_cyc * 1000000) /
 		    sys_clock_hw_cycles_per_sec();
-	__ASSERT(total_us < UINT32_MAX, "Measurement is limited.");
+	if (total_us >= UINT32_MAX) {
+		return 0;
+	}
 
 	/* Because of different clock sources for system clock and TIMER it
 	 * is possible that sleep time is bigger than total measured time.
