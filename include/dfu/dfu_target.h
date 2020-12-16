@@ -15,6 +15,8 @@
  */
 
 #include <zephyr/types.h>
+#include <stdbool.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,6 +24,7 @@ extern "C" {
 
 #define DFU_TARGET_IMAGE_TYPE_MCUBOOT 1
 #define DFU_TARGET_IMAGE_TYPE_MODEM_DELTA 2
+#define DFU_TARGET_IMAGE_TYPE_PERIPHERAL 3
 
 enum dfu_target_evt_id {
 	DFU_TARGET_EVT_TIMEOUT,
@@ -51,6 +54,17 @@ struct dfu_target {
  *	   code identicating reason of failure.
  **/
 int dfu_target_img_type(const void *const buf, size_t len);
+
+/**
+ * @brief Finds the image type given a string name
+ * @details Some updates cannot be identified by their header, such as
+ *			peripheral updates
+ *
+ * @param type[in] Type name string from the Job Document
+ * @return 0 if the image could not be identified by the string, else the
+ *			supported image type number
+ */
+int dfu_target_img_type_from_string(const char *type);
 
 /**
  * @brief Initialize the resources needed for the specific image type DFU

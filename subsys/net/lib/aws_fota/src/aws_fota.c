@@ -53,6 +53,7 @@ static uint8_t payload_buf[CONFIG_AWS_FOTA_PAYLOAD_SIZE];
 static uint8_t hostname[CONFIG_AWS_FOTA_HOSTNAME_MAX_LEN];
 static uint8_t file_path[CONFIG_AWS_FOTA_FILE_PATH_MAX_LEN];
 static uint8_t job_id[AWS_JOBS_JOB_ID_MAX_LEN];
+static char update_type[CONFIG_AWS_FOTA_TYPE_MAX_LEN];
 static aws_fota_callback_t callback;
 
 /**
@@ -183,7 +184,8 @@ static int get_job_execution(struct mqtt_client *const client,
 	err = aws_fota_parse_DescribeJobExecution_rsp(payload_buf, payload_len,
 						      job_id, hostname,
 						      file_path,
-						     &execution_version_number);
+						      &execution_version_number,
+						      update_type);
 
 	if (err < 0) {
 		LOG_ERR("Error when parsing the json: %d", err);
@@ -198,6 +200,7 @@ static int get_job_execution(struct mqtt_client *const client,
 	LOG_DBG("hostname: %s", log_strdup(hostname));
 	LOG_DBG("file_path %s", log_strdup(file_path));
 	LOG_DBG("execution_version_number: %d ", execution_version_number);
+	LOG_DBG("update_type %s", log_strdup(update_type));
 
 	/* Subscribe to update topic to receive feedback on whether an
 	 * update is accepted or not.
@@ -263,7 +266,8 @@ static int job_update_accepted(struct mqtt_client *const client,
 		sec_tag = CONFIG_AWS_FOTA_DOWNLOAD_SECURITY_TAG;
 #endif
 
-		err = fota_download_start(hostname, file_path, sec_tag, apn, 0);
+		err = fota_download_start(hostname, file_path, sec_tag, apn, 0,
+					update_type);
 		if (err) {
 			LOG_ERR("Error (%d) when trying to start firmware "
 				"download", err);
