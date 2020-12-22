@@ -187,6 +187,8 @@ struct cloud_api {
 				size_t list_count);
 	int (*user_data_set)(const struct cloud_backend *const backend,
 			     void *user_data);
+	int (*get_id)(const struct cloud_backend *const backend,
+		      char *id, size_t id_len);
 };
 
 /**@brief Structure for cloud backend configuration. */
@@ -414,6 +416,25 @@ static inline int cloud_user_data_set(struct cloud_backend *const backend,
 	}
 
 	return backend->api->user_data_set(backend, user_data);
+}
+
+/**@brief Get the id string for the current device.
+ *
+ * @param backend	Pointer to cloud backend structure.
+ * @param id		Pointer to buffer to receive ID.
+ * @param id_len	Size of buffer.
+ * @return 0 on success otherwise error number.
+ */
+static inline int cloud_get_id(const struct cloud_backend *const backend,
+		      char *id, size_t id_len)
+{
+	if (backend == NULL || backend->api == NULL ||
+	    backend->api->get_id == NULL || id == NULL ||
+	    id_len == 0) {
+		return -ENOTSUP;
+	}
+
+	return backend->api->get_id(backend, id, id_len);
 }
 
 /**

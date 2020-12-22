@@ -45,6 +45,13 @@ int nrf_cloud_encode_config_response(struct nrf_cloud_data const *const input,
 				     struct nrf_cloud_data *const output,
 				     bool *const has_config);
 
+#ifdef CONFIG_NRF_CLOUD_GATEWAY
+typedef int (*gateway_state_handler_t)(void *root_obj);
+
+void nrf_cloud_register_gateway_state_handler(gateway_state_handler_t handler);
+
+#endif
+
 #ifdef __cplusplus
 }
 #endif

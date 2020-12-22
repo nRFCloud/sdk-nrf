@@ -14,6 +14,10 @@
 #include "cJSON.h"
 #include "cJSON_os.h"
 
+#ifdef CONFIG_NRF_CLOUD_GATEWAY
+static gateway_state_handler_t gateway_state_handler;
+#endif
+
 LOG_MODULE_REGISTER(nrf_cloud_codec, CONFIG_NRF_CLOUD_LOG_LEVEL);
 
 #define DUA_PIN_STR "not_associated"
@@ -197,6 +201,13 @@ int nrf_cloud_encode_sensor_data(const struct nrf_cloud_sensor_data *sensor,
 	return 0;
 }
 
+#ifdef CONFIG_NRF_CLOUD_GATEWAY
+void nrf_cloud_register_gateway_state_handler(gateway_state_handler_t handler)
+{
+	gateway_state_handler = handler;
+}
+#endif
+
 int nrf_cloud_decode_requested_state(const struct nrf_cloud_data *input,
 				     enum nfsm_state *requested_state)
 {
@@ -218,11 +229,31 @@ int nrf_cloud_decode_requested_state(const struct nrf_cloud_data *input,
 		return -ENOENT;
 	}
 
+#ifdef CONFIG_NRF_CLOUD_GATEWAY
+	int ret;
+
+	if (gateway_state_handler) {
+		ret = gateway_state_handler(root_obj);
+		if (ret != 0) {
+			LOG_ERR("Error from gateway_state_handler: %d", ret);
+			return ret;
+		}
+	} else {
+		LOG_ERR("No gateway state handler registered");
+		return -EINVAL;
+	}
+#endif
+
 	nrf_cloud_decode_desired_obj(root_obj, &desired_obj);
 
 	topic_prefix_obj =
 		json_object_decode(desired_obj, "nrfcloud_mqtt_topic_prefix");
 	if (topic_prefix_obj != NULL) {
+
+#ifdef CONFIG_NRF_CLOUD_GATEWAY
+		set_gw_rx_topic(topic_prefix_obj->valuestring);
+		set_gw_tx_topic(topic_prefix_obj->valuestring);
+#endif
 		(*requested_state) = STATE_UA_PIN_COMPLETE;
 		cJSON_Delete(root_obj);
 		return 0;
@@ -232,11 +263,13 @@ int nrf_cloud_decode_requested_state(const struct nrf_cloud_data *input,
 	pairing_state_obj = json_object_decode(pairing_obj, "state");
 
 	if (!pairing_state_obj || pairing_state_obj->type != cJSON_String) {
+#ifndef CONFIG_NRF_CLOUD_GATEWAY
 		if (cJSON_HasObjectItem(desired_obj, "config") == false) {
 			LOG_WRN("Unhandled data received from nRF Cloud.");
 			LOG_INF("Ensure device firmware is up to date.");
 			LOG_INF("Delete and re-add device to nRF Cloud if problem persists.");
 		}
+#endif
 		cJSON_Delete(root_obj);
 		return -ENOENT;
 	}

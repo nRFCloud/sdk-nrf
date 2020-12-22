@@ -736,6 +736,12 @@ static int api_user_data_set(const struct cloud_backend *const backend,
 	return 0;
 }
 
+static int api_get_id(const struct cloud_backend *const backend,
+		      char *id, size_t id_len)
+{
+	return nct_client_id_get(id, id_len);
+}
+
 static const struct cloud_api nrf_cloud_api = {
 	.init = api_init,
 	.uninit = api_uninit,
@@ -745,7 +751,8 @@ static const struct cloud_api nrf_cloud_api = {
 	.ping = api_ping,
 	.keepalive_time_left = api_keepalive_time_left,
 	.input = api_input,
-	.user_data_set = api_user_data_set
+	.user_data_set = api_user_data_set,
+	.get_id = api_get_id
 };
 
 CLOUD_BACKEND_DEFINE(NRF_CLOUD, nrf_cloud_api);
