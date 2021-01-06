@@ -78,7 +78,7 @@ void update_start(void)
 
 	/* Functions for getting the host and file */
 	err = fota_download_start(CONFIG_DOWNLOAD_HOST, get_file(), SEC_TAG,
-				  apn, 0);
+				  apn, 0, NULL);
 	if (err != 0) {
 		update_sample_done();
 		printk("fota_download_start() failed, err %d\n", err);

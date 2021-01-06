@@ -128,9 +128,9 @@ static int do_fota_start(int op, const char *file_uri, int sec_tag,
 			LOG_ERR("Missing sec_tag");
 			return -EINVAL;
 		}
-		ret = fota_download_start(hostname, path, sec_tag, apn, 0);
+		ret = fota_download_start(hostname, path, sec_tag, apn, 0, NULL);
 	} else if (slm_util_cmd_casecmp(schema, SCHEMA_HTTP)) {
-		ret = fota_download_start(hostname, path, -1, apn, 0);
+		ret = fota_download_start(hostname, path, -1, apn, 0, NULL);
 	}
 
 	return ret;

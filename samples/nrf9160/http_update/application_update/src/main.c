@@ -40,7 +40,7 @@ static void update_start(void)
 	char *apn = NULL;
 
 	err = fota_download_start(CONFIG_DOWNLOAD_HOST, CONFIG_DOWNLOAD_FILE,
-				  SEC_TAG, apn, 0);
+				  SEC_TAG, apn, 0, NULL);
 	if (err != 0) {
 		update_sample_done();
 		printk("fota_download_start() failed, err %d\n", err);
