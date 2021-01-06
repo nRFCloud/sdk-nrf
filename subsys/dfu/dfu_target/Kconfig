@@ -71,6 +71,25 @@ config DFU_TARGET_MODEM_TIMEOUT
 
 endif # DFU_TARGET_MODEM_DELTA
 
+config DFU_TARGET_PERIPHERAL
+	bool "Peripheral update support"
+	default n
+	depends on UART_CONSOLE
+	select BASE64
+	select CJSON_LIB
+	help
+	  Enable support for updates that target a peripheral processor over UART
+
+if (DFU_TARGET_PERIPHERAL)
+
+config DFU_TARGET_PERIPHERAL_UART_NAME
+	string "Peripheral DFU UART name"
+	default "UART_0"
+	help
+	  UART device name to communicate with the peripheral processor with
+
+endif # DFU_TARGET_PERIPHERAL
+
 module=DFU_TARGET
 module-dep=LOG
 module-str=Device Firmware Upgrade

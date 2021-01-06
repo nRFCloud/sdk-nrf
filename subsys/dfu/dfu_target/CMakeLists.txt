@@ -20,3 +20,6 @@ zephyr_library_sources_ifdef(CONFIG_DFU_TARGET_MODEM_DELTA
 zephyr_library_sources_ifdef(CONFIG_DFU_TARGET_MCUBOOT
   src/dfu_target_mcuboot.c
   )
+zephyr_library_sources_ifdef(CONFIG_DFU_TARGET_PERIPHERAL
+  src/dfu_target_peripheral.c
+  )

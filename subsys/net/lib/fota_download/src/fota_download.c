@@ -26,6 +26,7 @@ static fota_download_callback_t callback;
 static struct download_client   dlc;
 static struct k_delayed_work    dlc_with_offset_work;
 static int socket_retries_left;
+static int update_type_hint;
 #ifdef CONFIG_DFU_TARGET_MCUBOOT
 static uint8_t mcuboot_buf[CONFIG_FOTA_DOWNLOAD_MCUBOOT_FLASH_BUF_SZ];
 #endif
@@ -94,8 +95,13 @@ static int download_client_callback(const struct download_client_evt *event)
 				return err;
 			}
 			first_fragment = false;
-			int img_type = dfu_target_img_type(event->fragment.buf,
-							event->fragment.len);
+
+			int img_type = update_type_hint;
+			if (img_type <= 0) {
+				img_type = dfu_target_img_type(event->fragment.buf,
+									event->fragment.len);
+			}
+
 			err = dfu_target_init(img_type, file_size,
 					      dfu_target_callback_handler);
 			if ((err < 0) && (err != -EBUSY)) {
@@ -245,7 +251,7 @@ static void download_with_offset(struct k_work *unused)
 }
 
 int fota_download_start(const char *host, const char *file, int sec_tag,
-			const char *apn, size_t fragment_size)
+			const char *apn, size_t fragment_size, const char *type)
 {
 	int err = -1;
 
@@ -260,6 +266,12 @@ int fota_download_start(const char *host, const char *file, int sec_tag,
 	}
 
 	socket_retries_left = CONFIG_FOTA_SOCKET_RETRIES;
+
+	if (type) {
+		update_type_hint = dfu_target_img_type_from_string(type);
+	} else {
+		update_type_hint = 0;
+	}
 
 #ifdef PM_S1_ADDRESS
 	/* B1 upgrade is supported, check what B1 slot is active,

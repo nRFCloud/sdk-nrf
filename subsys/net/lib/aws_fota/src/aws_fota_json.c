@@ -61,7 +61,8 @@ int aws_fota_parse_DescribeJobExecution_rsp(const char *job_document,
 					   char *job_id_buf,
 					   char *hostname_buf,
 					   char *file_path_buf,
-					   int *execution_version_number)
+					   int *execution_version_number,
+					   char *type_buf)
 {
 	if (job_document == NULL
 	    || job_id_buf == NULL
@@ -135,6 +136,21 @@ int aws_fota_parse_DescribeJobExecution_rsp(const char *job_document,
 	} else {
 		ret = -ENODATA;
 		goto cleanup;
+	}
+
+	if (type_buf != NULL) {
+		cJSON *type = cJSON_GetObjectItemCaseSensitive(job_data,
+								"type");
+		if (cJSON_GetStringValue(type) != NULL) {
+			strncpy_nullterm(type_buf, type->valuestring,
+						CONFIG_AWS_FOTA_TYPE_MAX_LEN);
+		} else {
+			/*
+			 * This is an optional field, non-fatal if it isn't
+			 * present in the Job Document
+			 */
+			type_buf = '\0';
+		}
 	}
 
 	ret = 1;

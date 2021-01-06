@@ -51,6 +51,8 @@ extern "C" {
  * @param[out] file_path_buf  Output buffer for the "file" field from the Job
  *			      Document
  * @param[out] version_number  Version number from the Job Execution data type.
+ * @param[out] type_buf Output buffer for the "type" field in the Job
+ *				Document
  *
  * @return 0 if the Job Execution object is empty, 1 if Job Execution object was
  *	     correctly decoded, otherwise a negative error code is returned
@@ -61,7 +63,8 @@ int aws_fota_parse_DescribeJobExecution_rsp(const char *job_document,
 					    char *job_id_buf,
 					    char *hostname_buf,
 					    char *file_path_buf,
-					    int *version_number);
+					    int *version_number,
+					    char *type_buf);
 
 /**
  * @brief Parse a Job Execution accepted response object. Returned by a call to

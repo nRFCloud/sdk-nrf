@@ -27,6 +27,9 @@ config AWS_FOTA_DOWNLOAD_SECURITY_TAG
 	int "Security tag to be used for downloads"
 	default -1
 
+config AWS_FOTA_TYPE_MAX_LEN
+	int "Optional type field buffer size"
+	default 16
 
 module=AWS_FOTA
 module-dep=LOG

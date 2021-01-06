@@ -8,6 +8,8 @@
 #include <dfu/mcuboot.h>
 #include <dfu/dfu_target.h>
 
+#include <string.h>
+
 #define DEF_DFU_TARGET(name) \
 static const struct dfu_target dfu_target_ ## name  = { \
 	.init = dfu_target_ ## name ## _init, \
@@ -23,6 +25,10 @@ DEF_DFU_TARGET(modem_delta);
 #ifdef CONFIG_DFU_TARGET_MCUBOOT
 #include "dfu/dfu_target_mcuboot.h"
 DEF_DFU_TARGET(mcuboot);
+#endif
+#ifdef CONFIG_DFU_TARGET_PERIPHERAL
+#include "dfu/dfu_target_peripheral.h"
+DEF_DFU_TARGET(peripheral);
 #endif
 
 #define MIN_SIZE_IDENTIFY_BUF 32
@@ -50,6 +56,16 @@ int dfu_target_img_type(const void *const buf, size_t len)
 	return -ENOTSUP;
 }
 
+int dfu_target_img_type_from_string(const char *type)
+{
+#ifdef CONFIG_DFU_TARGET_PERIPHERAL
+	if (strcmp(type, "peripheral") == 0) {
+		return DFU_TARGET_IMAGE_TYPE_PERIPHERAL;
+	}
+#endif
+	return 0;
+}
+
 int dfu_target_init(int img_type, size_t file_size, dfu_target_callback_t cb)
 {
 	const struct dfu_target *new_target = NULL;
@@ -64,11 +80,15 @@ int dfu_target_init(int img_type, size_t file_size, dfu_target_callback_t cb)
 		new_target = &dfu_target_modem_delta;
 	}
 #endif
+#ifdef CONFIG_DFU_TARGET_PERIPHERAL
+	if (img_type == DFU_TARGET_IMAGE_TYPE_PERIPHERAL) {
+		new_target = &dfu_target_peripheral;
+	}
+#endif
 	if (new_target == NULL) {
 		LOG_ERR("Unknown image type");
 		return -ENOTSUP;
 	}
-
 	/* The user is re-initializing with an previously aborted target.
 	 * Avoid re-initializing generally to ensure that the download can
 	 * continue where it left off. Re-initializing is required for modem

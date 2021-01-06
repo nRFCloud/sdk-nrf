@@ -97,13 +97,14 @@ int fota_download_init(fota_download_callback_t client_callback);
  * @param apn Access Point Name to use or NULL to use the default APN.
  * @param fragment_size Fragment size to be used for the download.
  *			If 0, @option{CONFIG_DOWNLOAD_CLIENT_HTTP_FRAG_SIZE} is used.
+ * @param type Optional update type hint
  *
  * @retval 0	     If download has started successfully.
  * @retval -EALREADY If download is already ongoing.
  *                   Otherwise, a negative value is returned.
  */
 int fota_download_start(const char *host, const char *file, int sec_tag,
-			const char *apn, size_t fragment_size);
+			const char *apn, size_t fragment_size, const char *type);
 
 #ifdef __cplusplus
 }
